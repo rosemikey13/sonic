@@ -18,6 +18,14 @@ variable "linux_admin" {
   sensitive = true
 }
 
+variable "psql_admin" {
+  
+}
+
+variable "psql_password" {
+  
+}
+
 
 provider "azurerm" {
   features {}
@@ -27,7 +35,7 @@ provider "azurerm" {
 
 resource "azurerm_resource_group" "sonic_rg" {
   name = "sonic-rg"
-  location = "East US"
+  location = "West US 2"
 }
 
 resource "azurerm_virtual_network" "sonic_vn" {
@@ -138,23 +146,67 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
 
 
   provisioner "local-exec" {
-    command = "echo [azure] >> hosts"
+    command = "echo [artifactory] >> ansible/hosts"
   }
 
   provisioner "local-exec" {
-    command = "echo '${azurerm_public_ip.artifactory_public_ip.ip_address}' >> hosts"
+    command = "echo '${azurerm_public_ip.artifactory_public_ip.ip_address}' >> ansible/hosts"
   }
 
   provisioner "local-exec" {
-   command = "echo '\n[azure:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}' >> hosts"
+   command = "echo '\n[artifactory:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}' >> ansible/hosts"
   }
 
-   provisioner "local-exec" {
+  provisioner "local-exec" {
    command = "ssh-keyscan -H ${azurerm_public_ip.artifactory_public_ip.ip_address} >> ~/.ssh/known_hosts"
   }
 
   provisioner "local-exec" {
-    command = "rm hosts"
+   command = "ssh-keyscan -H ${azurerm_public_ip.artifactory_public_ip.ip_address} >> ~/.ssh/known_hosts"
+  }
+
+  provisioner "local-exec" {
+    command = "rm ansible/hosts"
     when = destroy
   }
+}
+
+resource "azurerm_postgresql_flexible_server" "artifactory_db_server" {
+  name = "artifactory-postgres-db-server"
+  resource_group_name = azurerm_resource_group.sonic_rg.name
+  location = azurerm_resource_group.sonic_rg.location
+  version                = "12"
+  administrator_login    = var.psql_admin
+  administrator_password = var.psql_password
+  storage_mb             = 32768
+  sku_name               = "GP_Standard_D4s_v3"
+  backup_retention_days = 7
+  
+  provisioner "local-exec" {
+    command = "echo '---' >> ansible/artifactory/vars/db_vars.yaml"   
+  }
+
+  provisioner "local-exec" {
+    command = "echo 'env_vars:' >> ansible/artifactory/vars/db_vars.yaml"   
+  }
+
+  provisioner "local-exec" {
+    command = "echo ' $DB_USER: ${self.administrator_login}' >> ansible/artifactory/vars/db_vars.yaml"
+  }
+
+  provisioner "local-exec" {
+    command = "echo ' $DB_NAME: ${self.name}' >> ansible/artifactory/vars/db_vars.yaml"
+  }
+
+  provisioner "local-exec" {
+    command = "echo ' $DB_PASSWORD: ${self.administrator_password}' >> ansible/artifactory/vars/db_vars.yaml"
+  }
+
+}
+
+resource "azurerm_postgresql_flexible_server_database" "artifactory_db" {
+  name = "artifactory_db"
+  server_id = azurerm_postgresql_flexible_server.artifactory_db_server.id
+  collation = "en_US.utf8"
+  charset   = "UTF8"
 }

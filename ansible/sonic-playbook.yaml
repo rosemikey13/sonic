@@ -1,0 +1,54 @@
+---
+- name: Update apt
+  hosts: artifactory
+  tasks:
+    - name: Update apt
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 4000
+      become: yes
+
+- name: Configure Artifactory
+  hosts: artifactory
+  tasks:
+    - name: Make Artifactory installation directory
+      ansible.builtin.command:
+        cmd: mkdir -p /usr/local/jfrog/artifactory
+      become: yes
+    
+    
+    - name: Set jfrog_home env
+      ansible.builtin.lineinfile:
+        path: /home/ec2-user/.bashrc
+        line: "export JFROG_HOME=/usr/local/jfrog\nexport DB_USER=$DB_USER\nexport DB_"
+        insertafter: EOF
+      environment: {{}}
+    
+    - name: Get Artifactory linux archive
+      ansible.builtin.get_url:
+        dest: /usr/local/jfrog/artifactory.tar.gz
+        url: 'https://releases.jfrog.io/artifactory/bintray-artifactory/org/artifactory/oss/jfrog-artifactory-oss/7.161.15/jfrog-artifactory-oss-7.161.15-linux.tar.gz'
+        decompress: false
+      become: yes
+    
+    - name: Extract archive
+      ansible.builtin.command:
+        chdir: /usr/local/jfrog
+        cmd: tar -xvf ./artifactory.tar.gz -C artifactory --strip-components=1
+      become: yes
+    
+    - name: Start Artifactory as service
+      ansible.builtin.command:
+        cmd: /usr/local/jfrog/artifactory/app/bin/installService.sh
+      become: yes
+    
+    - name: Copy db_conf file
+      ansible.builtin.copy:
+        dest: /usr/local/jfrog/db_conf.yaml
+        src: artifactory/db_conf.yaml
+      become: yes
+    
+    - name: Copy db_conf to system.yaml
+      ansible.builtin.shell:
+        cmd: cat /usr/local/jfrog/db_conf.yaml >> /usr/local/jfrog/artifactory/var/etc/system.yaml
+      become: yes
