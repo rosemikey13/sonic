@@ -2,6 +2,3 @@ shared:
   database:
     type: postgresql
     driver: org.postgresql.Driver
-    url: jdbc:postgresql://$DB_NAME:5432/artifactory_db
-    username: $DB_USER
-    password: $DB_PASSWORD

@@ -2,14 +2,19 @@
 - name: Update apt
   hosts: artifactory
   tasks:
+
     - name: Update apt
       ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 4000
       become: yes
 
+
 - name: Configure Artifactory
   hosts: artifactory
+  vars_files:
+    - artifactory/vars/db_vars.yaml
+
   tasks:
     - name: Make Artifactory installation directory
       ansible.builtin.command:
@@ -20,9 +25,9 @@
     - name: Set jfrog_home env
       ansible.builtin.lineinfile:
         path: /home/ec2-user/.bashrc
-        line: "export JFROG_HOME=/usr/local/jfrog\nexport DB_USER=$DB_USER\nexport DB_"
+        line: "export JFROG_HOME=/usr/local/jfrog\nexport DB_USER={{DB_USER}}\nexport DB_PASS={{DB_PASSWORD}}\nexport DB_NAME={{DB_NAME}}"
         insertafter: EOF
-      environment: {{}}
+      become: yes
     
     - name: Get Artifactory linux archive
       ansible.builtin.get_url:
@@ -30,7 +35,43 @@
         url: 'https://releases.jfrog.io/artifactory/bintray-artifactory/org/artifactory/oss/jfrog-artifactory-oss/7.161.15/jfrog-artifactory-oss-7.161.15-linux.tar.gz'
         decompress: false
       become: yes
+
+    - name: Get Microsoft Root CA
+      ansible.builtin.get_url:
+        dest: /usr/local/jfrog/microsoft.crt
+        url: 'https://www.microsoft.com/pkiops/certs/Microsoft%20RSA%20Root%20Certificate%20Authority%202017.crt'
+        decompress: false
+      become: yes
+
+    - name: Get DigiCert Root CA
+      ansible.builtin.get_url:
+        dest: /usr/local/jfrog/digicert.crt.pem
+        url: 'https://cacerts.digicert.com/DigiCertGlobalRootG2.crt.pem'
+        decompress: false
+      become: yes
     
+    - name: Convert Microsoft crt 
+      ansible.builtin.command:
+        chdir: /usr/local/jfrog
+        cmd: openssl x509 -inform DER -in microsoft.crt -out microsoft.pem -outform PEM
+      become: yes
+    
+    - name: Create combined.pem
+      ansible.builtin.command:
+        cmd: touch /usr/local/jfrog/combined.pem
+      become: yes
+    
+    - name: Change ownership of combined.pem
+      ansible.builtin.command:
+        cmd: chown {{LINUX_ADMIN}} /usr/local/jfrog/combined.pem
+      become: yes
+
+    - name: Combine pem 
+      ansible.builtin.shell:
+        chdir: /usr/local/jfrog
+        cmd: cat digicert.crt.pem > combined.pem && cat microsoft.pem >> combined.pem
+      become: yes
+
     - name: Extract archive
       ansible.builtin.command:
         chdir: /usr/local/jfrog
@@ -50,5 +91,17 @@
     
     - name: Copy db_conf to system.yaml
       ansible.builtin.shell:
-        cmd: cat /usr/local/jfrog/db_conf.yaml >> /usr/local/jfrog/artifactory/var/etc/system.yaml
+        cmd: cat /usr/local/jfrog/db_conf.yaml > /usr/local/jfrog/artifactory/var/etc/system.yaml
+      become: yes
+    
+    - name: Copy env keys into system.yaml
+      ansible.builtin.lineinfile:
+        path: /usr/local/jfrog/artifactory/var/etc/system.yaml
+        line: "    url: jdbc:postgresql://{{DB_ENDPOINT}}:5432/{{DB_NAME}}?sslrootcert=/usr/local/jfrog/combined.pem&sslmode=verify-full \n    username: {{DB_USER}}\n    password: {{DB_PASSWORD}}"
+        insertafter: EOF
+      become: yes
+    
+    - name: Start Artifactory service
+      ansible.builtin.command:
+        cmd: systemctl start artifactory.service
       become: yes
