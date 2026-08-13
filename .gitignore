@@ -4,4 +4,4 @@ terraform.tfstate.backup
 terraform.tfvars
 .terraform/*
 hosts
-db_vars.yaml
+ansible/artifactory/vars/*

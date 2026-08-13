@@ -7,25 +7,33 @@ terraform {
   }
 }
 
-variable "subscription_id" {
-  
-}
+variable "subscription_id" {}
 
-variable "host_ip" {
-  
-}
+variable "vn_cidr_block" {}
+
 variable "linux_admin" {
   sensitive = true
 }
 
-variable "psql_admin" {
-  
-}
 
-variable "psql_password" {
-  
-}
+variable "psql_admin" {}
 
+variable "psql_password" {}
+
+variable "artifactory_subnet_cidr_block" {}
+
+variable "artifactory_db_subnet_cidr_block" {}
+
+
+variable "my_ip" {
+  default = ""
+  } # If not specified in terraform.tfvars, the data resource below will attempt to retrieve your ip
+
+data "http" "public_ip_addr" {
+  count =  var.my_ip == "" ? 1 : 0
+  url = "https://ipinfo.io/ip"
+
+}
 
 provider "azurerm" {
   features {}
@@ -48,14 +56,13 @@ resource "azurerm_virtual_network" "sonic_vn" {
   name = "sonic-vn"
   resource_group_name = azurerm_resource_group.sonic_rg.name
   location = azurerm_resource_group.sonic_rg.location
-  address_space = ["10.0.0.0/16"]
-
+  address_space = [var.vn_cidr_block]
 }
 
 resource "azurerm_subnet" "artifactory_prod_subnet" {
   virtual_network_name = azurerm_virtual_network.sonic_vn.name
   name = "artifactory-prod-subnet"
-  address_prefixes =["10.0.1.0/24"]
+  address_prefixes =[var.artifactory_subnet_cidr_block]
   resource_group_name = azurerm_resource_group.sonic_rg.name
 }
 
@@ -99,7 +106,7 @@ resource "azurerm_network_security_group" "sonic_network_sg" {
     protocol = "Tcp"
     source_port_range = "*"
     destination_port_range = "*"
-    source_address_prefix = var.host_ip
+    source_address_prefix = "${coalesce(var.my_ip, length(data.http.public_ip_addr) > 0 ? data.http.public_ip_addr[0].response_body : null)}/32"
     destination_address_prefix = "*"
   }
 
@@ -151,14 +158,6 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
   }
 
   provisioner "local-exec" {
-   command = "echo [local] >> ansible/hosts"
-  }
-
-  provisioner "local-exec" {
-   command = "echo '127.0.0.1' >> ansible/hosts"
-  }
-
-  provisioner "local-exec" {
     command = "echo [artifactory] >> ansible/hosts"
   }
 
@@ -171,7 +170,7 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
   }
 
   provisioner "local-exec" {
-   command = "echo '\n[artifactory:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}' >> ansible/hosts"
+   command = "echo '\n[artifactory:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}'>> ansible/hosts"
   }
 
 
@@ -184,7 +183,7 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
 resource "azurerm_subnet" "artifactory_db_subnet" {
   virtual_network_name = azurerm_virtual_network.sonic_vn.name
   name = "artifactory-db-subnet"
-  address_prefixes =["10.0.2.0/24"]
+  address_prefixes = [var.artifactory_db_subnet_cidr_block]
   resource_group_name = azurerm_resource_group.sonic_rg.name
   service_endpoints = [ "Microsoft.Storage" ]
 

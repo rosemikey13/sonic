@@ -10,32 +10,48 @@
       become: yes
 
 
-- name: Configure Artifactory
+- name: Download and unpack Artifactory
   hosts: artifactory
   vars_files:
     - artifactory/vars/db_vars.yaml
-
+    - artifactory/vars/playbook_vars.yaml
   tasks:
     - name: Make Artifactory installation directory
       ansible.builtin.command:
         cmd: mkdir -p /usr/local/jfrog/artifactory
       become: yes
     
-    
-    - name: Set jfrog_home env
-      ansible.builtin.lineinfile:
+    - name: Set artifactory environment variables
+      ansible.builtin.blockinfile:
+        
         path: /home/ec2-user/.bashrc
-        line: "export JFROG_HOME=/usr/local/jfrog\nexport DB_USER={{DB_USER}}\nexport DB_PASS={{DB_PASSWORD}}\nexport DB_NAME={{DB_NAME}}"
+        block: |
+          export JFROG_HOME=/usr/local/jfrog
+          export DB_USER={{DB_USER}}
+          export DB_PASS={{DB_PASSWORD}}
+          export DB_NAME={{DB_NAME}}
         insertafter: EOF
+        prepend_newline: true
       become: yes
     
     - name: Get Artifactory linux archive
       ansible.builtin.get_url:
         dest: /usr/local/jfrog/artifactory.tar.gz
-        url: 'https://releases.jfrog.io/artifactory/bintray-artifactory/org/artifactory/oss/jfrog-artifactory-oss/7.161.15/jfrog-artifactory-oss-7.161.15-linux.tar.gz'
+        url: https://releases.jfrog.io/artifactory/bintray-artifactory/org/artifactory/jcr/jfrog-artifactory-jcr/{{artifactory_version}}/jfrog-artifactory-jcr-{{artifactory_version}}-linux.tar.gz
         decompress: false
       become: yes
 
+    - name: Extract archive
+      ansible.builtin.command:
+        chdir: /usr/local/jfrog
+        cmd: tar -xvf ./artifactory.tar.gz -C artifactory --strip-components=1
+      become: yes
+
+- name: Retrieve DB CA Certs
+  hosts: artifactory
+  vars_files:
+    - artifactory/vars/db_vars.yaml
+  tasks:
     - name: Get Microsoft Root CA
       ansible.builtin.get_url:
         dest: /usr/local/jfrog/microsoft.crt
@@ -72,13 +88,12 @@
         cmd: cat digicert.crt.pem > combined.pem && cat microsoft.pem >> combined.pem
       become: yes
 
-    - name: Extract archive
-      ansible.builtin.command:
-        chdir: /usr/local/jfrog
-        cmd: tar -xvf ./artifactory.tar.gz -C artifactory --strip-components=1
-      become: yes
-    
-    - name: Start Artifactory as service
+- name: Artifactory DB Setup
+  hosts: artifactory
+  vars_files:
+    - artifactory/vars/db_vars.yaml
+  tasks:
+    - name: Setup Artifactory service
       ansible.builtin.command:
         cmd: /usr/local/jfrog/artifactory/app/bin/installService.sh
       become: yes
@@ -100,7 +115,10 @@
         line: "    url: jdbc:postgresql://{{DB_ENDPOINT}}:5432/{{DB_NAME}}?sslrootcert=/usr/local/jfrog/combined.pem&sslmode=verify-full \n    username: {{DB_USER}}\n    password: {{DB_PASSWORD}}"
         insertafter: EOF
       become: yes
-    
+
+- name: Run Artifactory
+  hosts: artifactory
+  tasks:
     - name: Start Artifactory service
       ansible.builtin.command:
         cmd: systemctl start artifactory.service
