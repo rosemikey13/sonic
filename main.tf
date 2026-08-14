@@ -24,6 +24,7 @@ variable "artifactory_subnet_cidr_block" {}
 
 variable "artifactory_db_subnet_cidr_block" {}
 
+variable "project_absolute_path" {}
 
 variable "my_ip" {
   default = ""
@@ -32,7 +33,6 @@ variable "my_ip" {
 data "http" "public_ip_addr" {
   count =  var.my_ip == "" ? 1 : 0
   url = "https://ipinfo.io/ip"
-
 }
 
 provider "azurerm" {
@@ -170,7 +170,7 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
   }
 
   provisioner "local-exec" {
-   command = "echo '\n[artifactory:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}'>> ansible/hosts"
+   command = "echo '\n[artifactory:vars]\nansible_ssh_private_key_file=/home/michael/.ssh/id_rsa\nansible_user=${var.linux_admin}\nansible_ssh_common_args=-o StrictHostKeyChecking=no\nansible_python_interpreter=/usr/bin/python3'>> ansible/hosts"
   }
 
 
@@ -178,6 +178,7 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
     command = "rm ansible/hosts"
     when = destroy
   }
+
 }
 
 resource "azurerm_subnet" "artifactory_db_subnet" {
@@ -312,3 +313,11 @@ resource "azurerm_postgresql_flexible_server_database" "artifactory_db" {
   }
 
 }
+
+resource "null_resource" "ansible_playbook_runner" {
+  depends_on = [ azurerm_linux_virtual_machine.artifactory_1, azurerm_postgresql_flexible_server.artifactory_db_server, azurerm_public_ip.artifactory_public_ip ]
+   provisioner "local-exec" {
+    command = "ansible-playbook -i ${var.project_absolute_path}/ansible/hosts ${var.project_absolute_path}/ansible/sonic-playbook.yaml"
+  }
+}
+
