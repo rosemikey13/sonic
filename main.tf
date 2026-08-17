@@ -2,29 +2,44 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "=4.1.0"
+      version = "=5.1.0"
     }
   }
 }
 
-variable "subscription_id" {}
+variable "azure_subscription_id" {}
 
-variable "vn_cidr_block" {}
+variable "location" {
+  default = "East US 2"
+}
+
+variable "vn_cidr_block" {
+  default = "10.0.0.0/16"
+}
+
+variable "artifactory_subnet_cidr_block" {
+  default = "10.0.1.0/24"
+}
+
+variable "artifactory_db_subnet_cidr_block" {
+  default = "10.0.2.0/24"
+}
 
 variable "linux_admin" {
+  default = "neptune-admin"
   sensitive = true
 }
 
-
-variable "psql_admin" {}
+variable "psql_admin" {
+  default = "neptune"
+}
 
 variable "psql_password" {}
 
-variable "artifactory_subnet_cidr_block" {}
 
-variable "artifactory_db_subnet_cidr_block" {}
-
-variable "project_absolute_path" {}
+variable "project_path" {
+  default = "~/Desktop/neptune"
+}
 
 variable "my_ip" {
   default = ""
@@ -37,38 +52,38 @@ data "http" "public_ip_addr" {
 
 provider "azurerm" {
   features {}
-  subscription_id = var.subscription_id
+  subscription_id = var.azure_subscription_id
 }
 
 
-resource "azurerm_resource_group" "sonic_rg" {
-  name = "sonic-rg"
-  location = "West US 2"
+resource "azurerm_resource_group" "neptune_rg" {
+  name = "neptune-rg"
+  location = var.location
 }
 
-resource "azurerm_network_watcher" "sonic_nwwatcher" {
-  name                = "sonic-nwwatcher"
-  location            = azurerm_resource_group.sonic_rg.location
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+resource "azurerm_network_watcher" "neptune_nwwatcher" {
+  name                = "neptune-nwwatcher"
+  location            = azurerm_resource_group.neptune_rg.location
+  resource_group_name = azurerm_resource_group.neptune_rg.name
 }
 
-resource "azurerm_virtual_network" "sonic_vn" {
-  name = "sonic-vn"
-  resource_group_name = azurerm_resource_group.sonic_rg.name
-  location = azurerm_resource_group.sonic_rg.location
+resource "azurerm_virtual_network" "neptune_vn" {
+  name = "neptune-vn"
+  resource_group_name = azurerm_resource_group.neptune_rg.name
+  location = azurerm_resource_group.neptune_rg.location
   address_space = [var.vn_cidr_block]
 }
 
 resource "azurerm_subnet" "artifactory_prod_subnet" {
-  virtual_network_name = azurerm_virtual_network.sonic_vn.name
+  virtual_network_name = azurerm_virtual_network.neptune_vn.name
   name = "artifactory-prod-subnet"
   address_prefixes =[var.artifactory_subnet_cidr_block]
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  resource_group_name = azurerm_resource_group.neptune_rg.name
 }
 
 resource "azurerm_public_ip" "artifactory_public_ip" {
-  location = azurerm_virtual_network.sonic_vn.location
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  location = azurerm_virtual_network.neptune_vn.location
+  resource_group_name = azurerm_resource_group.neptune_rg.name
 
   name = "artifactory-public-ip"
   lifecycle {
@@ -79,9 +94,9 @@ resource "azurerm_public_ip" "artifactory_public_ip" {
 }
 
 resource "azurerm_network_interface" "artifactory_ni" {
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  resource_group_name = azurerm_resource_group.neptune_rg.name
   name = "artifactory-network-interface"
-  location = azurerm_virtual_network.sonic_vn.location
+  location = azurerm_virtual_network.neptune_vn.location
   ip_configuration {
     name = "artifactory_ni_ip_config"
     subnet_id = azurerm_subnet.artifactory_prod_subnet.id
@@ -92,10 +107,10 @@ resource "azurerm_network_interface" "artifactory_ni" {
 
 
 
-resource "azurerm_network_security_group" "sonic_network_sg" {
-  name = "sonic-network-security-group"
-  location = azurerm_virtual_network.sonic_vn.location
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+resource "azurerm_network_security_group" "neptune_network_sg" {
+  name = "neptune-network-security-group"
+  location = azurerm_virtual_network.neptune_vn.location
+  resource_group_name = azurerm_resource_group.neptune_rg.name
   
 
   security_rule {
@@ -125,19 +140,18 @@ resource "azurerm_network_security_group" "sonic_network_sg" {
 
 }
 
-resource "azurerm_network_interface_security_group_association" "sonic_artifactory_ni_sg_association" {
-  network_security_group_id = azurerm_network_security_group.sonic_network_sg.id
+resource "azurerm_network_interface_security_group_association" "neptune_artifactory_ni_sg_association" {
+  network_security_group_id = azurerm_network_security_group.neptune_network_sg.id
   network_interface_id = azurerm_network_interface.artifactory_ni.id
 }
 
 resource "azurerm_linux_virtual_machine" "artifactory_1" {
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  resource_group_name = azurerm_resource_group.neptune_rg.name
   name = "artifactory-1"
-  location = azurerm_virtual_network.sonic_vn.location
+  location = azurerm_virtual_network.neptune_vn.location
   network_interface_ids = [azurerm_network_interface.artifactory_ni.id]
   admin_username = var.linux_admin
   size = "Standard_D4alds_v7"
-
 
 
   os_disk {
@@ -182,11 +196,14 @@ resource "azurerm_linux_virtual_machine" "artifactory_1" {
 }
 
 resource "azurerm_subnet" "artifactory_db_subnet" {
-  virtual_network_name = azurerm_virtual_network.sonic_vn.name
+  virtual_network_name = azurerm_virtual_network.neptune_vn.name
   name = "artifactory-db-subnet"
   address_prefixes = [var.artifactory_db_subnet_cidr_block]
-  resource_group_name = azurerm_resource_group.sonic_rg.name
-  service_endpoints = [ "Microsoft.Storage" ]
+  resource_group_name = azurerm_resource_group.neptune_rg.name
+
+  service_endpoint {
+    service = "Microsoft.Storage"
+  }
 
   delegation {
     name = "fs"
@@ -203,8 +220,8 @@ resource "azurerm_subnet" "artifactory_db_subnet" {
 
 resource "azurerm_network_security_group" "artifactory_db_network_sg" {
   name = "artifactory-db-network-security-group"
-  location = azurerm_virtual_network.sonic_vn.location
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  location = azurerm_virtual_network.neptune_vn.location
+  resource_group_name = azurerm_resource_group.neptune_rg.name
   
 
   security_rule {
@@ -241,22 +258,21 @@ resource "azurerm_subnet_network_security_group_association" "artifactory_db_net
 
 resource "azurerm_private_dns_zone" "artifactory_db_private_dns_zone" {
   name = "artifactory-db.postgres.database.azure.com"
-  resource_group_name = azurerm_resource_group.sonic_rg.name
+  resource_group_name = azurerm_resource_group.neptune_rg.name
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "artifactory_db_private_dns_zone_virtual_network_link" {
   name = "artifactory-db.postgres.database.azure.com"
-  resource_group_name = azurerm_resource_group.sonic_rg.name
-  private_dns_zone_name = azurerm_private_dns_zone.artifactory_db_private_dns_zone.name
-  virtual_network_id  = azurerm_virtual_network.sonic_vn.id
+  private_dns_zone_id = azurerm_private_dns_zone.artifactory_db_private_dns_zone.id
+  virtual_network_id  = azurerm_virtual_network.neptune_vn.id
   depends_on          = [azurerm_subnet.artifactory_db_subnet]
 }
 
 
 resource "azurerm_postgresql_flexible_server" "artifactory_db_server" {
   name = "artifactory-postgres-db-server"
-  resource_group_name = azurerm_resource_group.sonic_rg.name
-  location = azurerm_resource_group.sonic_rg.location
+  resource_group_name = azurerm_resource_group.neptune_rg.name
+  location = azurerm_resource_group.neptune_rg.location
   version                = "16"
   administrator_login    = var.psql_admin
   administrator_password = var.psql_password
@@ -314,10 +330,10 @@ resource "azurerm_postgresql_flexible_server_database" "artifactory_db" {
 
 }
 
-resource "null_resource" "ansible_playbook_runner" {
-  depends_on = [ azurerm_linux_virtual_machine.artifactory_1, azurerm_postgresql_flexible_server.artifactory_db_server, azurerm_public_ip.artifactory_public_ip ]
+resource "null_resource" "artifactory_playbook_runner" {
+  depends_on = [ azurerm_linux_virtual_machine.artifactory_1, azurerm_postgresql_flexible_server.artifactory_db_server, azurerm_postgresql_flexible_server_database.artifactory_db, azurerm_public_ip.artifactory_public_ip ]
    provisioner "local-exec" {
-    command = "ansible-playbook -i ${var.project_absolute_path}/ansible/hosts ${var.project_absolute_path}/ansible/sonic-playbook.yaml"
+    command = "ansible-playbook -i ${var.project_path}/ansible/hosts ${var.project_path}/ansible/artifactory-playbook.yaml"
   }
 }
 

@@ -39,7 +39,7 @@
     - name: Set artifactory environment variables
       ansible.builtin.blockinfile:
         
-        path: /home/ec2-user/.bashrc
+        path: ~/.bashrc
         block: |
           export JFROG_HOME=/usr/local/jfrog
           export DB_USER={{DB_USER}}
