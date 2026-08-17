@@ -18,7 +18,7 @@
 
 ## Setup
 1. Sign in to your azure account
-2. create azure neptune project invoice section ([Instructions](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/mca-section-invoice#create-a-new-invoice-section))
+2. Create azure neptune project invoice section ([Instructions](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/mca-section-invoice#create-a-new-invoice-section))
     - This is useful in keeping all billing line items for the project organized
 3. Login to account from Azure CLI
     - Use the command `az login` and follow the prompts
