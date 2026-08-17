@@ -50,6 +50,6 @@
 8. Use the IP Address found in `neptune > ansible > hosts` under the `[artifactory]` section to access the vm on port 8082 (e.g. 10.0.1.4:8082) in a browser to access Artifactory.
 
 9. Complete the initial Artifactory setup.
-   <font color="#ee4949">**IMPORTANT</font>: The Default username is `admin` and the default password is `password`. MAKE SURE THE DEFAULT PASSWORD IS CHANGED WHEN PROMPTED IN THE INITIAL SETUP**
+   <font color="#ee4949">**IMPORTANT</font>: The Default username is `admin` and the default password is `password`. MAKE SURE THE DEFAULT PASSWORD IS CHANGED WHEN PROMPTED IN THE INITIAL SETUP.**
 
-10. You now have a Docker container repository that only you can access ready to go!
+10. You now have a Docker container repository that only you can access!
