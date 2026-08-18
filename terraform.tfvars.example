@@ -1,6 +1,6 @@
 azure_subscription_id = ""
-## linux_admin="ec2-user"
-## psql_admin = "michael"
+## linux_admin = ""
+## psql_admin = ""
 psql_password = ""
 ## vn_cidr_block = ""
 ## artifactory_subnet_cidr_block = ""
