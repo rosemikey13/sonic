@@ -91,11 +91,6 @@
       ansible.builtin.command:
         cmd: touch /usr/local/jfrog/combined.pem
       become: yes
-    
-    - name: Change ownership of combined.pem
-      ansible.builtin.command:
-        cmd: chown {{LINUX_ADMIN}} /usr/local/jfrog/combined.pem
-      become: yes
 
     - name: Combine pem 
       ansible.builtin.shell:

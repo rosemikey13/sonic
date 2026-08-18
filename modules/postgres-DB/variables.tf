@@ -1,0 +1,9 @@
+variable "vn_id" {}
+variable "vn_name" {}
+variable "vn_location" {}
+variable "db_subnet_cidr_block" {}
+variable "rg_name" {}
+variable "psql_admin" {}
+variable "psql_password" {}
+variable "application_private_ip" {}
+variable "application_name" {}
